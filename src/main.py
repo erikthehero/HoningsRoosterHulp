@@ -24,7 +24,9 @@ flags.DEFINE_string('output_proto', '',
                     'Output file to write the cp_model proto to.')
 flags.DEFINE_string('params', 'max_time_in_seconds:10.0',
                     'Sat solver parameters.')
-
+from Nurse import Nurses
+from Shift import Shift
+from Calendar import Calendar
 
 def negated_bounded_span(works, start, length):
     """Filters an isolated sub-sequence of variables assined to True.
@@ -180,6 +182,8 @@ def solve_shift_scheduling(params, output_proto):
     num_employees = 8
     num_weeks = 4
     shifts = ['O', 'M', 'A', 'N']
+
+
 
     # Fixed assignment: (employee, shift, day).
     # This fixes the first 2 days of the schedule.
@@ -413,6 +417,12 @@ def solve_shift_scheduling(params, output_proto):
 def main(_=None):
     solve_shift_scheduling(FLAGS.params, FLAGS.output_proto)
 
+def test_read_nurses():
+    nurses = Nurses("../data/nurses.csv")
+    print(nurses)
+    
+    return
 
 if __name__ == '__main__':
-    app.run(main)
+    test_read_nurses()
+    #app.run(main)
