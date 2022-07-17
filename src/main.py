@@ -28,7 +28,7 @@ from Nurse import Nurses
 from Shift import Shifts
 
 def negated_bounded_span(works, start, length):
-    """Filters an isolated sub-sequence of variables assined to True.
+    """Filters an isolated sub-sequence of variables assigned to True.
   Extract the span of Boolean variables [start, start + length), negate them,
   and if there is variables to the left/right of this span, surround the span by
   them in non negated form.
@@ -175,8 +175,13 @@ def add_soft_sum_constraint(model, works, hard_min, soft_min, min_cost,
     return cost_variables, cost_coefficients
 
 
-def solve_shift_scheduling(params, output_proto):
-    """Solves the shift scheduling problem."""
+def solve_example_shift_scheduling(params, output_proto):
+    nurses = Nurses("../data/nurses.csv")
+    shifts = Shifts("../data/shifts.csv", 2022, 11)
+
+
+   
+   
     # Data
     num_employees = 8
     num_weeks = 4
@@ -414,7 +419,7 @@ def solve_shift_scheduling(params, output_proto):
 
 
 def main(_=None):
-    solve_shift_scheduling(FLAGS.params, FLAGS.output_proto)
+    solve_example_shift_scheduling(FLAGS.params, FLAGS.output_proto)
 
 def test_init_nurses():
     nurses = Nurses("../data/nurses.csv")
@@ -429,5 +434,5 @@ def test_init_shifts():
 
 if __name__ == '__main__':
     #test_init_nurses()
-    test_init_shifts()
-    #app.run(main)
+    #test_init_shifts()
+    app.run(main)
