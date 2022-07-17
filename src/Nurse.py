@@ -39,22 +39,12 @@ class Nurses:
                     continue
                 
                 line_parts = line.split(";")
-                name        = self._CleanColumnEntry(line_parts[0])
-                contract    = float(self._CleanColumnEntry(line_parts[1]))
-                level       = int(self._CleanColumnEntry(line_parts[2]))
-                zzper       = bool(self._CleanColumnEntry(line_parts[3]))
-                headnurse   = bool(self._CleanColumnEntry(line_parts[4]))
-                resuscitate = bool(self._CleanColumnEntry(line_parts[5]))
+                name        = line_parts[0]
+                contract    = float(line_parts[1])
+                level       = int(line_parts[2])
+                zzper       = bool(line_parts[3])
+                headnurse   = bool(line_parts[4])
+                resuscitate = bool(line_parts[5])
 
                 nurses.append(Nurse(name, contract, level, zzper, headnurse, resuscitate))
         return nurses
-
-
-
-
-    def _CleanColumnEntry(self, entry):
-        return entry
-                    
-
-
-        return
