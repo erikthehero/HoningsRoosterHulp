@@ -25,8 +25,7 @@ flags.DEFINE_string('output_proto', '',
 flags.DEFINE_string('params', 'max_time_in_seconds:10.0',
                     'Sat solver parameters.')
 from Nurse import Nurses
-from Shift import Shift
-from Calendar import Calendar
+from Shift import Shifts
 
 def negated_bounded_span(works, start, length):
     """Filters an isolated sub-sequence of variables assined to True.
@@ -417,12 +416,18 @@ def solve_shift_scheduling(params, output_proto):
 def main(_=None):
     solve_shift_scheduling(FLAGS.params, FLAGS.output_proto)
 
-def test_read_nurses():
+def test_init_nurses():
     nurses = Nurses("../data/nurses.csv")
     print(nurses)
-    
+    return
+
+def test_init_shifts():
+    shifts = Shifts("../data/shifts.csv", 2022, 11)
+    #shifts.printTypes()
+    print(shifts)
     return
 
 if __name__ == '__main__':
-    test_read_nurses()
+    #test_init_nurses()
+    test_init_shifts()
     #app.run(main)
