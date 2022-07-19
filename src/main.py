@@ -421,6 +421,18 @@ def solve_example_shift_scheduling(params, output_proto):
 def main(_=None):
     solve_example_shift_scheduling(FLAGS.params, FLAGS.output_proto)
 
+
+def run(_=None):
+    params = FLAGS.params
+    output_proto = FLAGS.output_proto
+
+    nurses = Nurses("../data/nurses.csv")
+    shifts = Shifts("../data/shifts.csv", 2022, 11)
+
+    print(nurses)
+    #print(shifts)
+    pass
+
 def test_init_nurses():
     nurses = Nurses("../data/nurses.csv")
     print(nurses)
@@ -435,4 +447,5 @@ def test_init_shifts():
 if __name__ == '__main__':
     #test_init_nurses()
     #test_init_shifts()
-    app.run(main)
+    #app.run(main)
+    app.run(run)
