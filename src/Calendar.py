@@ -1,8 +1,8 @@
-class Calendar:
+class Calendar(object):
     def __init__(self):
         pass
 
-    def getAvailableDaysOfMonth(month):
+    def getAvailableDaysFromYearMonth(month):
         pass
 
     def isSpecialDay():
