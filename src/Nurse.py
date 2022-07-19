@@ -42,9 +42,9 @@ class Nurses:
                 name        = line_parts[0]
                 contract    = float(line_parts[1])
                 level       = int(line_parts[2])
-                zzper       = bool(line_parts[3])
-                headnurse   = bool(line_parts[4])
-                resuscitate = bool(line_parts[5])
+                zzper       = int(line_parts[3]) == 1
+                headnurse   = int(line_parts[4]) == 1
+                resuscitate = int(line_parts[5]) == 1
 
                 nurses.append(Nurse(name, contract, level, zzper, headnurse, resuscitate))
         return nurses
