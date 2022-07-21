@@ -1,7 +1,6 @@
 import os
 from datetime import datetime, timedelta
 from unicodedata import name
-from Calendar import Calendar
 
 class Shift:
     def __init__(self, name, abbreviation, start_date, end_date):
@@ -73,9 +72,9 @@ class Shifts:
             for st in self.types:
                 for c in range(st.getCount()):
                     if st.getAbbreviation() == "n":
-                        shifts.append(Shift(st.getName(), st.getAbbreviation(), st.getStartTime() + timedelta(delta_n), st.getEndTime() + timedelta(delta_n+1)))
+                        shifts.append(Shift(f"{st.getName()}_{c}", st.getAbbreviation()+str(c), st.getStartTime() + timedelta(delta_n), st.getEndTime() + timedelta(delta_n+1)))
                     else:
-                        shifts.append(Shift(st.getName(), st.getAbbreviation(), st.getStartTime() + timedelta(delta_n), st.getEndTime() + timedelta(delta_n)))
+                        shifts.append(Shift(f"{st.getName()}_{c}", st.getAbbreviation()+str(c), st.getStartTime() + timedelta(delta_n), st.getEndTime() + timedelta(delta_n)))
             curr_date += delta
             delta_n += 1
         return shifts

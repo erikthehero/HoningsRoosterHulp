@@ -26,6 +26,7 @@ flags.DEFINE_string('params', 'max_time_in_seconds:10.0',
                     'Sat solver parameters.')
 from Nurse import Nurses
 from Shift import Shifts
+from Constraint import Constraints
 
 def negated_bounded_span(works, start, length):
     """Filters an isolated sub-sequence of variables assigned to True.
@@ -174,6 +175,15 @@ def add_soft_sum_constraint(model, works, hard_min, soft_min, min_cost,
 
     return cost_variables, cost_coefficients
 
+
+def printSolverStatistics(solver, status):
+    print()
+    print('Statistics')
+    print('  - status          : %s' % solver.StatusName(status))
+    print('  - conflicts       : %i' % solver.NumConflicts())
+    print('  - branches        : %i' % solver.NumBranches())
+    print('  - wall time       : %f s' % solver.WallTime())
+    return
 
 def solve_example_shift_scheduling(params, output_proto):
     nurses = Nurses("../data/nurses.csv")
@@ -410,17 +420,11 @@ def solve_example_shift_scheduling(params, output_proto):
                 print('  %s violated by %i, linear penalty=%i' %
                       (var.Name(), solver.Value(var), obj_int_coeffs[i]))
 
-    print()
-    print('Statistics')
-    print('  - status          : %s' % solver.StatusName(status))
-    print('  - conflicts       : %i' % solver.NumConflicts())
-    print('  - branches        : %i' % solver.NumBranches())
-    print('  - wall time       : %f s' % solver.WallTime())
-
+    printSolverStatistics(solver, status)
+    return
 
 def main(_=None):
     solve_example_shift_scheduling(FLAGS.params, FLAGS.output_proto)
-
 
 def run(_=None):
     params = FLAGS.params
@@ -428,9 +432,24 @@ def run(_=None):
 
     nurses = Nurses("../data/nurses.csv")
     shifts = Shifts("../data/shifts.csv", 2022, 11)
+    constraints = Constraints("../data/requests.csv")
+    model = cp_model.CpModel()
 
-    print(nurses)
-    #print(shifts)
+    work = {}
+    for n,_ in enumerate(nurses.nurses):
+        for s,_ in enumerate(shifts.shifts):
+            work[n, s] = model.NewBoolVar(f"{n}_{s}")
+
+    print(f"nurses #:\t{len(nurses.nurses)}")
+    print(f"shifts #:\t{len(shifts.shifts)}")
+    print(f"constraints #:\t{len(constraints.requests)}")
+
+    # solve
+    solver = cp_model.CpSolver()
+    solution_printer = cp_model.ObjectiveSolutionPrinter()
+    status = solver.Solve(model, solution_printer)
+
+    printSolverStatistics(solver, status)
     pass
 
 def test_init_nurses():
