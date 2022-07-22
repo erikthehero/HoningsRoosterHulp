@@ -27,6 +27,7 @@ flags.DEFINE_string('params', 'max_time_in_seconds:10.0',
 from Nurse import Nurses
 from Shift import Shifts
 from Constraint import Constraints
+from Visualize import RosterVisualizer
 
 def negated_bounded_span(works, start, length):
     """Filters an isolated sub-sequence of variables assigned to True.
@@ -434,6 +435,7 @@ def run(_=None):
     shifts = Shifts("../data/shifts.csv", 2022, 11)
     constraints = Constraints("../data/requests.csv")
     model = cp_model.CpModel()
+    roster_visualizer = RosterVisualizer() 
 
     work = {}
     for n,_ in enumerate(nurses.nurses):
@@ -444,12 +446,22 @@ def run(_=None):
     print(f"shifts #:\t{len(shifts.shifts)}")
     print(f"constraints #:\t{len(constraints.requests)}")
 
+    # add constraints
+    constraints.add_fill_every_shift_constraint(model, nurses, shifts, work)
+
     # solve
     solver = cp_model.CpSolver()
     solution_printer = cp_model.ObjectiveSolutionPrinter()
     status = solver.Solve(model, solution_printer)
-
     printSolverStatistics(solver, status)
+
+    for s,sval in enumerate(shifts.shifts):
+        for n,nval in enumerate(nurses.nurses):
+             print(f"{nval.name} {sval.abbreviation} {solver.Value(work[n,s])}")
+
+    # visualize
+    roster_visualizer.Visualize(nurses, shifts, work, solver)
+
     pass
 
 def test_init_nurses():

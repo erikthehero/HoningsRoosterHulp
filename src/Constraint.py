@@ -28,6 +28,13 @@ class Constraints:
             print(request)
         return ""
 
+    def add_fill_every_shift_constraint(self, model, nurses, shifts, work):
+        for s,_ in enumerate(shifts.shifts):
+            model.Add(sum(work[n, s] for n,_ in enumerate(nurses.nurses)) == 1)
+        return
+
+
+
     def _InitRequestsFromFile(self, fn):
         assert(fn)
         assert(os.path.isfile(fn))
@@ -72,3 +79,5 @@ class Constraints:
                         is_hard   = int(clean_part) == 1
                 constraints.append(Constraint(name, full_date, day, shift, do_assign, streakmin, streakmax, max_sum, is_hard))
         return constraints
+
+        
