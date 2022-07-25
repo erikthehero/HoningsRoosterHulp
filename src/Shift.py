@@ -9,7 +9,6 @@ class Shift:
         self.start_date = start_date
         self.end_date = end_date
 
-
     def __str__(self):
         if self.abbreviation == "a" or self.abbreviation == "n": 
             return f"{self.name}\t\t{self.abbreviation}  {self.start_date} {self.end_date}"
