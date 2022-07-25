@@ -455,12 +455,12 @@ def run(_=None):
     status = solver.Solve(model, solution_printer)
     printSolverStatistics(solver, status)
 
-    for s,sval in enumerate(shifts.shifts):
-        for n,nval in enumerate(nurses.nurses):
-             print(f"{nval.name} {sval.abbreviation} {solver.Value(work[n,s])}")
+    #for s,sval in enumerate(shifts.shifts):
+    #    for n,nval in enumerate(nurses.nurses):
+    #         print(f"{nval.name} {sval.abbreviation} {solver.Value(work[n,s])}")
 
     # visualize
-    roster_visualizer.Visualize(nurses, shifts, work, solver)
+    roster_visualizer.visualize(nurses, shifts, work, solver)
 
     pass
 
