@@ -5,7 +5,8 @@ from bokeh.document import Document
 from bokeh.embed import file_html
 from bokeh.layouts import gridplot
 from bokeh.models import (CategoricalAxis, ContinuousAxis, CategoricalScale, ColumnDataSource,
-                          FactorRange, HoverTool, Plot, Rect, Text,  Range1d)
+                          FactorRange, HoverTool, Plot, Rect, Text,  Range1d, Legend)
+from bokeh.plotting import Figure
 from bokeh.resources import INLINE
 from bokeh.sampledata.us_holidays import us_holidays
 from bokeh.util.browser import view
@@ -76,7 +77,7 @@ class RosterVisualizer:
         #plot = Plot(x_range=xdr, y_range=ydr, x_scale=x_scale, y_scale=y_scale, width=600, height=600, outline_line_color=None)
         ymin = min(source.data["weeks"])
         ymax = max(source.data["weeks"])
-        plot = Plot(width=800, height=800, y_range=Range1d(start=ymax+1, end=ymin-1), outline_line_color=None)
+        plot = Figure(width=800, height=800, y_range=Range1d(start=ymax+1, end=ymin-1), outline_line_color=None)
         plot.title.text = month_names[month]
         plot.title.text_font_size = "16px"
         plot.title.text_color = "black"
@@ -84,31 +85,46 @@ class RosterVisualizer:
         plot.min_border_left = 0
         plot.min_border_bottom = 5
 
-        rect = Rect(x="days", y="weeks", width=1.0, height=1.0, fill_color="day_backgrounds", line_color="black")
+
+
+
+        nurse_glyphs = []
+        nurse_sources = self._GetNurseShiftSourcesForVisualization(nurses, shifts, work, solver)
+        for nurse_name in nurse_sources.keys():
+            nurse_glyphs.append(plot.rect(x="days", y="weeks", width=1.0, height=0.125, fill_color="colors", line_color="white", fill_alpha=0.7, line_alpha = 0.7, source=nurse_sources[nurse_name], legend_label=nurse_name))
+            #rect = Rect(x="days", y="weeks", width=1.0, height=0.125, fill_color="colors", line_color="white", fill_alpha=0.7, line_alpha = 0.7)
+            #nurse_glyphs.append(plot.add_glyph(nurse_sources[nurse_name], rect))
+
+        rect = Rect(x="days", y="weeks", width=1.0, height=1.0, fill_color="day_backgrounds", line_color="black", fill_alpha=0.0)
+        plot.rect()
         plot.add_glyph(source, rect)
 
-
-        nurse_sources = self._GetNurseShiftSourcesForVisualization(nurses, shifts, work, solver)
-        for nurse_source_key in nurse_sources.keys():
-            rect = Rect(x="days", y="weeks", width=1.0, height=1.0, line_color="black")
-            plot.add_glyph(nurse_sources[nurse_source_key], rect)
-
-        # test rects
-        offset = 0.125
+        # test rects  
+        """offset = 0.125
+        week = 4
+        day = 0
         test_rect_source = ColumnDataSource(data=dict(
-            x            = [2, 2, 2, 2, 2, 2, 2, 2],
-            y            = [3-3*offset-0.5*offset, 3-2*offset-0.5*offset, 3-1*offset-0.5*offset, 3-0.5*offset, 3+1*offset-0.5*offset, 3+2*offset-0.5*offset, 3+3*offset-0.5*offset, 3+4*offset-0.5*offset], # 3+5*offset-0.5*offset
+            x            = [day, day, day, day, day, day, day, day],
+            y            = [week-3*offset-0.5*offset, week-2*offset-0.5*offset, week-1*offset-0.5*offset, week-0.5*offset, week+1*offset-0.5*offset, week+2*offset-0.5*offset, week+3*offset-0.5*offset, week+4*offset-0.5*offset], # 3+5*offset-0.5*offset
         ))
-        test_rect = Rect(x="x", y="y", width=1.0, height=0.125, fill_color="red",fill_alpha=0.5, line_color="black")
-        plot.add_glyph(test_rect_source, test_rect)
+        test_rect = Rect(x="x", y="y", width=1.0, height=0.125, fill_color="red",fill_alpha=0.5, line_color="black", line_alpha=0.3)
+        plot.add_glyph(test_rect_source, test_rect)"""
 
         #rect = Rect(x="holidays_days", y="holidays_weeks", width=0.9, height=0.9, fill_color="pink", line_color="indianred")
         #rect_renderer = plot.add_glyph(holidays_source, rect)
 
-        text = Text(x="days", y="weeks", text="month_days", text_align="center", text_baseline="middle", text_font_size = "14px")
+
+        # day of month numbers
+        text = Text(x="days", y="weeks", text="month_days", text_align="center", text_color="black", text_baseline="middle", text_font_size = "14px")
         plot.add_glyph(source, text)
 
-        #xaxis = CategoricalAxis()
+        # name of day
+        x_of_day_text    = [0, 1, 2, 3, 4, 5, 6]
+        y_of_day_text    = [-.6, -.6, -.6, -.6, -.6, -.6, -.6]
+        name_of_day_text = ["ma", "di", "wo", "do", "vr", "za", "zo"]
+        plot.text(x=x_of_day_text, y=y_of_day_text, text=name_of_day_text, text_align="center", text_color="black", text_baseline="middle", text_font_size = "14px")
+
+        #xaxis = ContinuousAxis()
         #xaxis.major_label_text_font_size = "11px"
         #xaxis.major_label_standoff = 0
         #xaxis.major_tick_line_color = None
@@ -117,6 +133,21 @@ class RosterVisualizer:
 
         #hover_tool = HoverTool(renderers=[rect_renderer], tooltips=[("Holiday", "@month_holidays")])
         #plot.tools.append(hover_tool)
+        
+        #legend_list = []
+        #for n, nurse_name in enumerate(nurse_sources.keys()):
+        #    legend_list.append((nurse_name, nurse_glyphs[n]))
+        #legend = Legend(items=legend_list, location=(0, -50))
+        #plot.add_layout(legend, 'left')
+
+        # legend
+        plot.add_layout(plot.legend[0], 'right')
+        plot.legend.click_policy="hide"
+
+        # axii formatting
+        plot.axis.visible = False
+        plot.xgrid.grid_line_color = None
+        plot.ygrid.grid_line_color = None
 
         return plot
 
@@ -141,8 +172,10 @@ class RosterVisualizer:
         return None
 
     def _GetMonthWeekFromMonthDay(self, month_day):
+        month_weeks = len(self.month_days)//7
+        weeks = sum([ [week]*7 for week in range(month_weeks) ], [])
         index = self.month_days.index(str(month_day))
-        week = math.floor(float(index) / 7.0)
+        week = weeks[index]
         return week
 
     def _GetNurseShiftSourcesForVisualization(self, nurses, shifts, work, solver):
@@ -150,13 +183,16 @@ class RosterVisualizer:
         for n, nurse in enumerate(nurses.nurses):
             days  = []
             weeks = []
+            colors = []
             for s, shift in enumerate(shifts.shifts):
                 if solver.Value(work[n,s]):
-                    days.append(shift.start_date.day) # TODO: fix day, should be in range 0:7
-                    weeks.append(self._GetMonthWeekFromMonthDay(shift.start_date.day) + self._GetYOffsetFromShift(shift.abbreviation)) # TODO: check this
+                    days.append(shift.start_date.weekday())
+                    weeks.append(self._GetMonthWeekFromMonthDay(shift.start_date.day) + self._GetYOffsetFromShift(shift.abbreviation))
+                    colors.append((self.nurse_colors[n][0]*255, self.nurse_colors[n][1]*255, self.nurse_colors[n][2]*255))
             sources[nurse.name] = ColumnDataSource(data=dict(
                 days  = days,
-                weeks = weeks
+                weeks = weeks,
+                colors = colors
             ))
         return sources
 
