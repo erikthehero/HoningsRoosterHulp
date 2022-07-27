@@ -29,10 +29,32 @@ class Constraints:
         return ""
 
     def add_fill_every_shift_constraint(self, model, nurses, shifts, work):
+        # every shift should be filled by one and only one nurse
         for s,_ in enumerate(shifts.shifts):
             model.Add(sum(work[n, s] for n,_ in enumerate(nurses.nurses)) == 1)
         return
 
+    def add_one_shift_per_day_constraint(self, model, nurses, shifts, work):
+        # every nurse should work one and only one shift per day
+        shift_day_bundles = self._GetShiftDayBundles(shifts)
+        for bundle in shift_day_bundles:
+            for n,_ in enumerate(nurses.nurses):
+                model.Add(sum(work[n, s] for s in bundle) <= 1)
+        return
+
+    def _GetShiftDayBundles(self, shifts):
+        shift_day_bundles = []
+        cur_day = (shifts.shifts[0].start_date.year, shifts.shifts[0].start_date.month, shifts.shifts[0].start_date.day)
+        cur_shift_bundle = []
+        for s, shift in enumerate(shifts.shifts):
+            if cur_day != (shift.start_date.year, shift.start_date.month, shift.start_date.day):
+                shift_day_bundles.append(cur_shift_bundle)
+                cur_day = (shift.start_date.year, shift.start_date.month, shift.start_date.day)
+                cur_shift_bundle = []
+            cur_shift_bundle.append(s)
+
+        shift_day_bundles.append(cur_shift_bundle)
+        return shift_day_bundles
 
 
     def _InitRequestsFromFile(self, fn):
