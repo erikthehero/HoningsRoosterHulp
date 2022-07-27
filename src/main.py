@@ -447,7 +447,8 @@ def run(_=None):
     print(f"constraints #:\t{len(constraints.requests)}")
 
     # add constraints
-    constraints.add_fill_every_shift_constraint(model, nurses, shifts, work)
+    constraints.add_fill_every_shift_constraint(model, nurses, shifts, work) 
+    constraints.add_one_shift_per_day_constraint(model, nurses, shifts, work)
 
     # solve
     solver = cp_model.CpSolver()
