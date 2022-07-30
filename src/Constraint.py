@@ -18,10 +18,10 @@ class Constraint:
         return f"name:{self.name}, date:{self.full_date}, day:{self.day}, shift:{self.shift}, do_assign:{self.do_assign}, streakmin:{self.streakmin}, streakmax:{self.streakmax}, is_hard:{self.is_hard}"
 
 class Constraints:
+    # https://ambtenarensalaris.nl/wp-content/uploads/2022/07/Cao-Gehandicaptenzorg-2021-2024.pdf
     def __init__(self, fn):
         self.fn = fn
         self.requests = self._InitRequestsFromFile(self.fn)
-        pass
 
     def __str__(self):
         for request in self.requests:
@@ -41,6 +41,105 @@ class Constraints:
             for n,_ in enumerate(nurses.nurses):
                 model.Add(sum(work[n, s] for s in bundle) <= 1)
         return
+
+    def add_rest_after_night_shift_constraint(self, model, nurses, shifts, work):
+        # pp92 CAO Gehandicaptenzorg 2021-2024: 14uur rust na nachtdienst
+        bundles_total = [self._GetFollowUpShiftsFromShiftType("n0", ["dk0", "dm0", "dl0", "dl1", "a0", "a1"], shifts), self._GetFollowUpShiftsFromShiftType("n1", ["dk0", "dm0", "dl0", "dl1", "a0", "a1"], shifts)]
+        
+        for bundles in bundles_total:
+            for n,_ in enumerate(nurses.nurses): # n0|n1 -> sum(dk0, dm0, dl0, dl1, a0, a1) == 0
+                for bundle in bundles:
+                    model.Add(sum(work[n,s] for s in bundle[1])==0).OnlyEnforceIf(work[n,bundle[0]])
+        return
+
+    def add_weekly_contract_hours_constraint(self, model, nurses, shifts, work):
+        hard_min = 0
+        shift_week_bundles = self._GetShiftWeekBundles(shifts)
+        cost_variables = []
+        cost_coefficients = []
+        i = 0
+        for n,nurse in enumerate(nurses.nurses):
+            soft_min = nurse.contract
+            soft_max = nurse.contract
+            if nurse.zzper:
+                max_cost = 2
+                min_cost = 2
+            else:
+                max_cost = 1
+                min_cost = 1
+
+            for bundle in shift_week_bundles:
+                if i == 1:
+                    j = 0
+                hard_max = 60 # pp92 CAO Gehandicaptenzorg 2021-2024: max 60 urige werkweek
+                cv, cc = self._Add_soft_sum_constraint(n, bundle, shifts, model, work, hard_min, soft_min, min_cost, soft_max, hard_max, max_cost, "")
+                cost_variables.extend(cv)
+                cost_coefficients.extend(cc)
+                i+=1
+
+        return cost_variables, cost_coefficients
+
+    def _Add_soft_sum_constraint(self, n, bundle, shifts, model, work, hard_min, soft_min, min_cost, soft_max, hard_max, max_cost, prefix):
+        cost_variables = []
+        cost_coefficients = []
+        week_faction = len(bundle) / 56.0
+        sum_var = model.NewIntVar(hard_min, hard_max, '')
+        model.Add(sum_var == sum(work[n, s] * int((shifts.shifts[s].work_hours * week_faction)) for s in bundle)) # sum of hours worked for this week
+
+        # Penalize sums below the soft_min target.
+        if soft_min > hard_min and min_cost > 0:
+            delta = model.NewIntVar(-60, 60, '')
+            model.Add(delta == int(soft_min) - sum_var)
+            # TODO(user): Compare efficiency with only excess >= soft_min - sum_var.
+            excess = model.NewIntVar(0, 60, prefix + ': under_sum')
+            model.AddMaxEquality(excess, [delta, 0])
+            cost_variables.append(excess)
+            cost_coefficients.append(min_cost)
+
+        # Penalize sums above the soft_max target.
+        if soft_max < hard_max and max_cost > 0:
+            delta = model.NewIntVar(-60, 60, '')
+            model.Add(delta == sum_var - int(soft_max))
+            excess = model.NewIntVar(0, 60, prefix + ': over_sum')
+            model.AddMaxEquality(excess, [delta, 0])
+            cost_variables.append(excess)
+            cost_coefficients.append(max_cost)
+        
+        return cost_variables, cost_coefficients
+
+    def _GetFollowUpShiftsFromShiftType(self, primary_type, target_types, shifts):
+        shift_follow_up_bundles = []
+        follow_up_bundle = []
+        target_bundle = []
+        for s,shift in enumerate(shifts.shifts):
+            if shift.abbreviation == primary_type:
+                if follow_up_bundle and target_bundle:
+                    follow_up_bundle.append(target_bundle)
+                    shift_follow_up_bundles.append(follow_up_bundle)
+                follow_up_bundle = [s]
+                target_bundle = []
+
+            if not follow_up_bundle:
+                continue
+
+            if shift.abbreviation in target_types:
+                target_bundle.append(s)
+
+        return shift_follow_up_bundles
+
+    def _GetShiftWeekBundles(self, shifts):
+        shift_week_bundles = []
+        cur_week = shifts.shifts[0].start_date.isocalendar().week
+        cur_shift_bundle = []
+        cur_week_hours = []
+        for s, shift in enumerate(shifts.shifts):
+            if cur_week != shift.start_date.isocalendar().week:
+                shift_week_bundles.append(cur_shift_bundle)
+                cur_week = shift.start_date.isocalendar().week
+                cur_shift_bundle = []
+            cur_shift_bundle.append(s)
+        shift_week_bundles.append(cur_shift_bundle)
+        return shift_week_bundles
 
     def _GetShiftDayBundles(self, shifts):
         shift_day_bundles = []
