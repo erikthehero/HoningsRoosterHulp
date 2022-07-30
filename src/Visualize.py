@@ -84,10 +84,7 @@ class RosterVisualizer:
         plot.title.offset = 25
         plot.min_border_left = 0
         plot.min_border_bottom = 5
-
-
-
-
+        
         nurse_glyphs = []
         nurse_sources = self._GetNurseShiftSourcesForVisualization(nurses, shifts, work, solver)
         for nurse_name in nurse_sources.keys():
