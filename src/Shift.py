@@ -8,6 +8,7 @@ class Shift:
         self.abbreviation = abbreviation
         self.start_date = start_date
         self.end_date = end_date
+        self.work_hours = (self.end_date-self.start_date).total_seconds() / 3600.0
 
     def __str__(self):
         if self.abbreviation == "a" or self.abbreviation == "n": 
