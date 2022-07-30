@@ -189,16 +189,11 @@ def printSolverStatistics(solver, status):
 def solve_example_shift_scheduling(params, output_proto):
     nurses = Nurses("../data/nurses.csv")
     shifts = Shifts("../data/shifts.csv", 2022, 11)
-
-
-   
-   
+    
     # Data
     num_employees = 8
     num_weeks = 4
     shifts = ['O', 'M', 'A', 'N']
-
-
 
     # Fixed assignment: (employee, shift, day).
     # This fixes the first 2 days of the schedule.
@@ -447,8 +442,14 @@ def run(_=None):
     print(f"constraints #:\t{len(constraints.requests)}")
 
     # add constraints
-    constraints.add_fill_every_shift_constraint(model, nurses, shifts, work) 
+    constraints.add_fill_every_shift_constraint(model, nurses, shifts, work)
     constraints.add_one_shift_per_day_constraint(model, nurses, shifts, work)
+    constraints.add_rest_after_night_shift_constraint(model, nurses, shifts, work)
+    obj_int_vars, obj_int_coeffs = constraints.add_weekly_contract_hours_constraint(model, nurses, shifts, work)
+
+    model.Minimize(
+        sum(obj_int_vars[i] * obj_int_coeffs[i]
+            for i in range(len(obj_int_vars))))
 
     # solve
     solver = cp_model.CpSolver()
