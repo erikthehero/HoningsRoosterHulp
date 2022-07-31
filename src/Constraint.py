@@ -72,7 +72,7 @@ class Constraints:
                 if i == 1:
                     j = 0
                 hard_max = 60 # pp92 CAO Gehandicaptenzorg 2021-2024: max 60 urige werkweek
-                cv, cc = self._Add_soft_sum_constraint(n, bundle, shifts, model, work, hard_min, soft_min, min_cost, soft_max, hard_max, max_cost, "")
+                cv, cc = self._Add_soft_sum_constraint(n, bundle, shifts, model, work, hard_min, soft_min, min_cost, soft_max, hard_max, max_cost, "weekly_contract_hours")
                 cost_variables.extend(cv)
                 cost_coefficients.extend(cc)
                 i+=1
@@ -106,6 +106,133 @@ class Constraints:
             cost_coefficients.append(max_cost)
         
         return cost_variables, cost_coefficients
+
+    def add_penalized_day_evening_transition_constraint(self, model, nurses, shifts, work):
+        # Penalized transitions
+        # previous_day_shift, next_day_shift, penalty (0=hard)
+        cost = 30
+        penalized_transitions = [("dk0",  "a0", cost), # ochtend -> avond / nacht
+                                 ("dk0",  "a1", cost),
+                                 ("dm0",  "a0", cost),
+                                 ("dm0",  "a1", cost),
+                                 ("dl0",  "a0", cost),
+                                 ("dl0",  "a1", cost),
+                                 ("dl1",  "a0", cost),
+                                 ("dl1",  "a1", cost),
+                                 ("dk0",  "n0", cost),
+                                 ("dk0",  "n1", cost),
+                                 ("dm0",  "n0", cost),
+                                 ("dm0",  "n1", cost),
+                                 ("dl0",  "n0", cost),
+                                 ("dl0",  "n1", cost),
+                                 ("dl1",  "n0", cost),
+                                 ("dl1",  "n1", cost),
+                                 ("dl0", "dl1", 0),  # zelfde shift, zelfde rij
+                                 ("dl1", "dl0", 0),
+                                 ( "a0",  "a1", 0),
+                                 ( "a1",  "a0", 0),
+                                 ( "n0",  "n1", 0),
+                                 ( "n1",  "n0", 0),
+                                 ( "a0", "dk0", cost), # avond -> ochtend
+                                 ( "a0", "dm0", cost),
+                                 ( "a0", "dl1", cost),
+                                 ( "a0", "dl1", cost),
+                                 ( "a1", "dk0", cost),
+                                 ( "a1", "dm0", cost),
+                                 ( "a1", "dl1", cost),
+                                 ( "a1", "dl1", cost)]
+
+        obj_bool_vars = []
+        obj_bool_coeffs = []
+        for previous_shift, next_shift, cost in penalized_transitions:
+            transitions = self._GetShiftDayToDayTransitions(shifts, previous_shift, next_shift)
+            for n,nurse in enumerate(nurses.nurses):
+                for transition in transitions:
+                    t = [work[n,transition[0]].Not(), work[n,transition[1]].Not()]
+                    if cost == 0:
+                        #model.AddBoolOr(t)
+                        #model.Add(work[n,transition[1]]==0).OnlyEnforceIf(work[n,transition[0]])
+                        #model.Add(work[n,transition[0]] + work[n,transition[1]]<=1)
+                        model.AddAtMostOne([work[n,transition[0]],work[n,transition[1]]])
+                        
+                    else:
+                        trans_var = model.NewBoolVar(f"transition ({nurse.name} {transition[0]} {transition[1]})")
+                        t.append(trans_var)
+                        model.AddBoolOr(t)
+                        obj_bool_vars.append(trans_var)
+                        obj_bool_coeffs.append(cost)
+        return obj_bool_vars, obj_bool_coeffs
+
+    def add_sequence_constraint(self, model, nurses, shifts, work):
+        min_seq_len = 3
+        min_cost = 2 # TODO: tune param
+        obj_seq_vars = [] 
+        obj_seq_coeffs = []
+        sequences_of_followup_shifts = self._GetShiftSequences(shifts)
+
+        for n,_ in enumerate(nurses.nurses):
+            for seq in sequences_of_followup_shifts:
+                for length in range(0, min_seq_len):
+                    for start in range(len(seq) - length + 1):
+                        span = self._GegatedBoundedSpan(n, seq, work, start, length)
+                        name = ': under_span(start=%i, length=%i)' % (start, length)
+                        lit = model.NewBoolVar(f"under_span {n} {start} {length}")
+                        span.append(lit)
+                        model.AddBoolOr(span)
+                        obj_seq_vars.append(lit)
+                        obj_seq_coeffs.append(min_cost * (min_seq_len - length))
+
+        #for n, nurse in enumerate(nurses.nurses):
+        #    for i,seq in enumerate(sequences_of_followup_shifts):
+        #        #seq_var = model.NewBoolVar(0, sequence_length, f"seq_var {n} {i}")
+        #        seq_var = model.NewBoolVar(f"seq_var {n} {i}")
+        #        model.Add(seq_var == sum(work[n, s] for s in seq) == len(seq))
+        #        model.Add(sum(work[n, s] for s in seq) < sequence_length+1) # no more than 5 shifts in a row 
+        #        obj_seq_vars.append(seq_var)
+        #        obj_seq_coeffs.append(reward)
+        return obj_seq_vars, obj_seq_coeffs
+
+    def _GegatedBoundedSpan(self, n, seq, work, start, length):
+        span = []
+        # Left border (start of works, or works[start - 1])
+        if start > 0:
+            span.append(work[n, seq[start - 1]] )
+        for i in range(length):
+            span.append(work[n, seq[start + i]].Not()) 
+        # Right border (end of works or works[start + length])
+        if start + length < len(seq):
+            span.append(work[n, seq[start + length]])
+        return span
+
+    def _GetShiftSequences(self, shifts):
+        shift_types = shifts.GetTypes()
+        sequences = []
+        for st in shift_types:
+            sequence = []
+            for s, shift in enumerate(shifts.shifts):
+                if shift.abbreviation == st:
+                    sequence.append(s)
+            sequences.append(sequence)
+        return sequences
+
+
+    def _GetShiftDayToDayTransitions(self, shifts, previous_shift_type, next_shift_type):
+        day_to_day_transitions = []
+        previous_shift = None
+        for s,shift in enumerate(shifts.shifts):
+            if not previous_shift:
+                if shift.abbreviation == previous_shift_type:
+                    previous_shift = (s, shift)
+                continue
+
+            if not self._ShiftsAreSameDay(previous_shift[1], shift) and shift.abbreviation == next_shift_type:
+                day_to_day_transitions.append((previous_shift[0], s))
+                previous_shift = None
+
+        return day_to_day_transitions
+
+    def _ShiftsAreSameDay(self, shift1, shift2):
+        return shift1.start_date.replace(hour=0, minute=0, second=0, microsecond=0) == shift2.start_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     def _GetFollowUpShiftsFromShiftType(self, primary_type, target_types, shifts):
         shift_follow_up_bundles = []
