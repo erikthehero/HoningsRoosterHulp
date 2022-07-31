@@ -55,6 +55,9 @@ class Shifts:
             print(t)
         return ""
 
+    def GetTypes(self):
+        return ["dk0", "dm0", "dl0", "dl1", "a0", "a1", "n0", "n1"]
+
     def _initShiftsFromMonth(self):
         shifts = []
         if self.month == 12:

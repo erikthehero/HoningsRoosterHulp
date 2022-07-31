@@ -84,13 +84,13 @@ class RosterVisualizer:
         plot.title.offset = 25
         plot.min_border_left = 0
         plot.min_border_bottom = 5
-        
+
         nurse_glyphs = []
         nurse_sources = self._GetNurseShiftSourcesForVisualization(nurses, shifts, work, solver)
         for nurse_name in nurse_sources.keys():
             nurse_glyphs.append(plot.rect(x="days", y="weeks", width=1.0, height=0.125, fill_color="colors", line_color="white", fill_alpha=0.7, line_alpha = 0.7, source=nurse_sources[nurse_name], legend_label=nurse_name))
-            #rect = Rect(x="days", y="weeks", width=1.0, height=0.125, fill_color="colors", line_color="white", fill_alpha=0.7, line_alpha = 0.7)
-            #nurse_glyphs.append(plot.add_glyph(nurse_sources[nurse_name], rect))
+            plot.text(x="name_x", y="name_y", text="name_value", text_font_size = "8px", source=nurse_sources[nurse_name], legend_label=nurse_name)
+            plot.text(x="shift_type_x", y="shift_type_y", text="shift_type_value", text_font_size = "8px", source=nurse_sources[nurse_name], legend_label=nurse_name)
 
         rect = Rect(x="days", y="weeks", width=1.0, height=1.0, fill_color="day_backgrounds", line_color="black", fill_alpha=0.0)
         plot.rect()
@@ -181,15 +181,35 @@ class RosterVisualizer:
             days  = []
             weeks = []
             colors = []
+            name_value = []
+            name_x = []
+            name_y = []
+            shift_type_value = []
+            shift_type_x = []
+            shift_type_y = []
+
             for s, shift in enumerate(shifts.shifts):
                 if solver.Value(work[n,s]):
                     days.append(shift.start_date.weekday())
                     weeks.append(self._GetMonthWeekFromMonthDay(shift.start_date.day) + self._GetYOffsetFromShift(shift.abbreviation))
                     colors.append((self.nurse_colors[n][0]*255, self.nurse_colors[n][1]*255, self.nurse_colors[n][2]*255))
+                    name_value.append(nurse.name[0:3].capitalize())
+                    name_x.append(days[-1]+0.25)
+                    name_y.append(weeks[-1]+0.0625)
+                    shift_type_value.append(shift.abbreviation)
+                    shift_type_x.append(days[-1]-0.4)
+                    shift_type_y.append(weeks[-1]+0.0625)
+
             sources[nurse.name] = ColumnDataSource(data=dict(
                 days  = days,
                 weeks = weeks,
-                colors = colors
+                colors = colors,
+                name_value = name_value,
+                name_x = name_x,
+                name_y = name_y,
+                shift_type_value = shift_type_value,
+                shift_type_x = shift_type_x,
+                shift_type_y = shift_type_y
             ))
         return sources
 

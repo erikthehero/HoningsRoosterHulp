@@ -189,7 +189,7 @@ def printSolverStatistics(solver, status):
 def solve_example_shift_scheduling(params, output_proto):
     nurses = Nurses("../data/nurses.csv")
     shifts = Shifts("../data/shifts.csv", 2022, 11)
-    
+
     # Data
     num_employees = 8
     num_weeks = 4
@@ -335,10 +335,7 @@ def solve_example_shift_scheduling(params, output_proto):
     for previous_shift, next_shift, cost in penalized_transitions:
         for e in range(num_employees):
             for d in range(num_days - 1):
-                transition = [
-                    work[e, previous_shift, d].Not(), work[e, next_shift,
-                                                           d + 1].Not()
-                ]
+                transition = [work[e,previous_shift,d].Not(), work[e,next_shift,d+1].Not()]
                 if cost == 0:
                     model.AddBoolOr(transition)
                 else:
@@ -442,17 +439,33 @@ def run(_=None):
     print(f"constraints #:\t{len(constraints.requests)}")
 
     # add constraints
+    obj_bool_vars, obj_bool_coeffs = [],[]
+    obj_int_vars, obj_int_coeffs = [],[]
+    obj_seq_vars, obj_seq_coeffs = [],[]
+
     constraints.add_fill_every_shift_constraint(model, nurses, shifts, work)
     constraints.add_one_shift_per_day_constraint(model, nurses, shifts, work)
     constraints.add_rest_after_night_shift_constraint(model, nurses, shifts, work)
     obj_int_vars, obj_int_coeffs = constraints.add_weekly_contract_hours_constraint(model, nurses, shifts, work)
+    obj_bool_vars, obj_bool_coeffs = constraints.add_penalized_day_evening_transition_constraint(model, nurses, shifts, work)
+    obj_seq_vars, obj_seq_coeffs = constraints.add_sequence_constraint(model, nurses, shifts, work)
+                            
+    # constraints.add_favor_sequence(...)
+    # constraints.add_favor_whole_weekend(...)
+    # constraints.add_do_do_not_assign_shift(...)
+
 
     model.Minimize(
-        sum(obj_int_vars[i] * obj_int_coeffs[i]
-            for i in range(len(obj_int_vars))))
+        sum(obj_int_vars[i] * obj_int_coeffs[i]   for i in range(len(obj_int_vars))) + 
+        sum(obj_bool_vars[i] * obj_bool_coeffs[i] for i in range(len(obj_bool_vars))) +
+        sum(obj_seq_vars[i] * obj_seq_coeffs[i]  for i in range(len(obj_seq_vars)))
+    )
 
     # solve
     solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 60.0
+    solver.parameters.random_seed = 17 #TODO: remove once testing
+
     solution_printer = cp_model.ObjectiveSolutionPrinter()
     status = solver.Solve(model, solution_printer)
     printSolverStatistics(solver, status)
