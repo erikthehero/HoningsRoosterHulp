@@ -62,11 +62,11 @@ class Constraints:
             soft_min = nurse.contract
             soft_max = nurse.contract
             if nurse.zzper:
-                max_cost = 2
-                min_cost = 2
+                max_cost = 4
+                min_cost = 3
             else:
                 max_cost = 1
-                min_cost = 1
+                min_cost = 2
 
             for bundle in shift_week_bundles:
                 if i == 1:
@@ -78,6 +78,206 @@ class Constraints:
                 i+=1
 
         return cost_variables, cost_coefficients
+
+    def add_skill_requirement_resuscitate(self, model, nurses, shifts, work):
+        dl_shift_bundles = self._GetShiftSequences(shifts, "dl")
+        a_shift_bundles = self._GetShiftSequences(shifts, "a")
+        n_shift_bundles = self._GetShiftSequences(shifts, "n")
+        nurses_with_resuscitate_skill = self._GetNursesThatCanResuscitate(nurses)
+
+        for i in range(len(dl_shift_bundles[0])): # dl
+            model.Add(sum(work[n, dl_shift_bundles[0][i]] for n in nurses_with_resuscitate_skill) + sum(work[n, dl_shift_bundles[1][i]] for n in nurses_with_resuscitate_skill)>=1)
+
+        for i in range(len(a_shift_bundles[0])): # a
+            model.Add(sum(work[n, a_shift_bundles[0][i]] for n in nurses_with_resuscitate_skill) + sum(work[n, a_shift_bundles[1][i]] for n in nurses_with_resuscitate_skill)>=1)
+
+        for i in range(len(n_shift_bundles[0])): # n
+            model.Add(sum(work[n, n_shift_bundles[0][i]] for n in nurses_with_resuscitate_skill) + sum(work[n, n_shift_bundles[1][i]] for n in nurses_with_resuscitate_skill)>=1)
+        
+        return
+
+    def add_hard_requests_do_not_work_day(self, model, nurses, shifts, work):
+        for request in self.requests:
+            if not self._Request_type_is_hard_do_not_work_day(request):
+                continue
+            day_num = shifts.ConvertDayStrToDayNum(request.day)
+            shift_day_bundles = self._GetShiftDayBundles(shifts, request.shift)
+            for bundle in shift_day_bundles:
+                bundle_day = shifts.shifts[bundle[0]].start_date.weekday()
+                if not bundle_day == day_num:
+                    continue
+                
+                for n,nurse in enumerate(nurses.nurses):
+                    if not nurse.name == request.name:
+                        continue
+                    if request.do_assign:
+                        model.Add(sum(work[n,s] for s in bundle)==1)
+                    else:
+                        model.Add(sum(work[n,s] for s in bundle)==0)
+        return
+
+    def add_hard_requests_do_not_work_shift(self, model, nurses, shifts, work):
+        for request in self.requests:
+            if not self._Request_type_is_hard_do_not_work_shift(request):
+                continue
+            shift_bundles = self._GetShiftSequences(shifts, request.shift)
+            for bundle in shift_bundles:               
+                for n,nurse in enumerate(nurses.nurses):
+                    if not nurse.name == request.name:
+                        continue
+                    model.Add(sum(work[n,s] for s in bundle)==0)
+        return
+
+    def add_hard_requests_rest_after_n_shifts(self, model, nurses, shifts, work):
+        for request in self.requests:
+            if not self._Request_type_is_hard_rest_after_n_shifts(request):
+                continue
+            days_day_seq_bundles = self._GetDaysDayCombinationBundles(shifts, request.streakmax)
+            for n,nurse in enumerate(nurses.nurses):
+                if not nurse.name == request.name:
+                    continue
+                for bundle in days_day_seq_bundles:
+                    conditional_shifts = []
+                    for s in bundle[0]:
+                        conditional_shifts.append(work[n,s]) 
+                    model.Add(sum(work[n,s] for s in bundle[1][0])==0).OnlyEnforceIf(conditional_shifts)
+        return
+
+    def _GetDaysDayCombinationBundles(self, shifts, sequence_length, rest_length=1):
+        days_day_combination_bundles = []
+        seq_shift_combinations = self._GetSequenceShiftCombinations(sequence_length)
+        shift_day_bundles = self._GetShiftDayBundles(shifts)
+        for s, shift in enumerate(shifts.shifts):
+            days_day_combination_bundle = []
+            days_day_combination_free_bundle = []
+
+            s_bundle_ind = -1
+            for ind, bundle in enumerate(shift_day_bundles):
+                if s in bundle:
+                    s_bundle_ind = ind
+                    break
+            if s_bundle_ind == -1:
+                continue
+
+            if s_bundle_ind+sequence_length >= len(shift_day_bundles):
+                break
+
+            for cmb in seq_shift_combinations:
+                days_day_combination_bundle.append(s)
+                for i in range(sequence_length-1):
+                    days_day_combination_bundle.append(shift_day_bundles[i+s_bundle_ind+1][+cmb[i]])
+                    
+                days_day_combination_free_bundle.append(shift_day_bundles[s_bundle_ind+sequence_length])
+                days_day_combination_bundles.append((days_day_combination_bundle, days_day_combination_free_bundle))
+                days_day_combination_bundle = []
+                days_day_combination_free_bundle = []
+        return days_day_combination_bundles
+
+    def _GetSequenceShiftCombinations(self, sequence_length):
+        assert(sequence_length >1 and sequence_length <= 5)
+        seq_shift_combinations = []
+        if sequence_length == 2:
+            for i in range(8):
+                seq_shift_combinations.append([i])
+
+        elif sequence_length == 3:
+            for i in range(8):
+                for j in range(8):
+                    seq_shift_combinations.append([i,j])
+
+        elif sequence_length == 4:
+            for i in range(8):
+                for j in range(8):
+                    for k in range(8):
+                        seq_shift_combinations.append([i,j,k])
+
+        elif sequence_length == 5:
+            for i in range(8):
+                for j in range(8):
+                    for k in range(8):
+                        for l in range(8):
+                            seq_shift_combinations.append([i,j,k,l])
+
+        return seq_shift_combinations
+
+    def _GetDaysDaySequenceBundles(self, shifts, sequence_length, rest_length=1):
+        days_day_seq_bundles = []
+        cur_shift = shifts.shifts[0]
+        for s, shift in enumerate(shifts.shifts):
+            days_day_seq_bundle = []
+            days_day_seq_free_bundle = []
+            if s + 8*(sequence_length+1) > len(shifts.shifts):
+                break
+            for i in range(8*(sequence_length+1)):
+                if i > 8*sequence_length:
+                    days_day_seq_free_bundle.append(s+i)
+                else:
+                    days_day_seq_bundle.append(s+i)
+
+            days_day_seq_bundles.append((days_day_seq_bundle, days_day_seq_free_bundle))    
+            days_day_seq_bundle = []
+            days_day_seq_free_bundle = []
+
+        return days_day_seq_bundles
+
+    def add_soft_requests_do_assign_shift(self, model, nurses, shifts, work):
+        cost = 10 #TODO: tune param
+        tmp_var, tmp_coeffs = [],[]
+        for request in self.requests:
+            if not self._Request_type_is_soft_do_assign_shift(request):
+                continue
+            shift_bundles = self._GetShiftSequences(shifts, request.shift, request.day)
+            for bundle in shift_bundles:
+                for n,nurse in enumerate(nurses.nurses):
+                    if not nurse.name == request.name:
+                        continue
+                    for s in bundle:
+                        if request.do_assign:
+                            tmp_var.append(work[n,s].Not()) # penalize not assigning this shift
+                        else:
+                            tmp_var.append(work[n,s])
+                        tmp_coeffs.append(cost)
+        return tmp_var, tmp_coeffs
+
+    def add_favor_whole_weekend(self, model, nurses, shifts, work):
+        #tmp_var, tmp_coeffs = [],[]
+        shift_sequences_saturday = self._GetShiftSequences(shifts, shift_target=None, day_target="za")
+        shift_sequences_sunday = self._GetShiftSequences(shifts, shift_target=None, day_target="zo")
+        sunday_start_ind = len(shift_sequences_sunday[0]) - len(shift_sequences_saturday[0]) #TODO: to be tested for months starting at sundays
+
+        for n,nurse in enumerate(nurses.nurses):
+            for si in range(len(shift_sequences_saturday)):
+                for ind in range(len(shift_sequences_saturday[si])):
+                    model.Add(work[n, shift_sequences_sunday[si][ind+sunday_start_ind]]==1).OnlyEnforceIf(work[n, shift_sequences_saturday[si][ind]])
+
+        return
+
+    def add_max_5_shifts_per_week(self, model, nurses, shifts, work):
+        shift_week_bundles = self._GetShiftWeekBundles(shifts)
+        for n,_ in enumerate(nurses.nurses):
+            for bundle in shift_week_bundles:
+                model.Add(sum(work[n, s] for s in bundle) <= 5)
+        return
+
+    def _Request_type_is_soft_do_assign_shift(self, request):
+        if not request.full_date and request.shift and not request.is_hard:
+            return True
+        return False
+        
+    def _Request_type_is_hard_do_not_work_day(self, request):
+        if not request.full_date and request.day and request.is_hard: #TODO: full_date probably can be incorporated
+            return True
+        return False
+
+    def _Request_type_is_hard_rest_after_n_shifts(self, request):
+        if not request.full_date and not request.day and request.streakmax and request.is_hard: #TODO: full_date probably can be incorporated
+            return True
+        return False
+
+    def _Request_type_is_hard_do_not_work_shift(self, request): #TODO: full_date probably can be incorporated
+        if not request.full_date and not request.day and request.shift and not request.do_assign and request.is_hard:
+            return True
+        return False        
 
     def _Add_soft_sum_constraint(self, n, bundle, shifts, model, work, hard_min, soft_min, min_cost, soft_max, hard_max, max_cost, prefix):
         cost_variables = []
@@ -150,11 +350,7 @@ class Constraints:
                 for transition in transitions:
                     t = [work[n,transition[0]].Not(), work[n,transition[1]].Not()]
                     if cost == 0:
-                        #model.AddBoolOr(t)
-                        #model.Add(work[n,transition[1]]==0).OnlyEnforceIf(work[n,transition[0]])
-                        #model.Add(work[n,transition[0]] + work[n,transition[1]]<=1)
-                        model.AddAtMostOne([work[n,transition[0]],work[n,transition[1]]])
-                        
+                        model.Add(work[n,transition[1]]==0).OnlyEnforceIf(work[n,transition[0]])
                     else:
                         trans_var = model.NewBoolVar(f"transition ({nurse.name} {transition[0]} {transition[1]})")
                         t.append(trans_var)
@@ -174,25 +370,23 @@ class Constraints:
             for seq in sequences_of_followup_shifts:
                 for length in range(0, min_seq_len):
                     for start in range(len(seq) - length + 1):
-                        span = self._GegatedBoundedSpan(n, seq, work, start, length)
+                        span = self._NegatedBoundedSpan(n, seq, work, start, length)
                         name = ': under_span(start=%i, length=%i)' % (start, length)
                         lit = model.NewBoolVar(f"under_span {n} {start} {length}")
                         span.append(lit)
                         model.AddBoolOr(span)
                         obj_seq_vars.append(lit)
                         obj_seq_coeffs.append(min_cost * (min_seq_len - length))
-
-        #for n, nurse in enumerate(nurses.nurses):
-        #    for i,seq in enumerate(sequences_of_followup_shifts):
-        #        #seq_var = model.NewBoolVar(0, sequence_length, f"seq_var {n} {i}")
-        #        seq_var = model.NewBoolVar(f"seq_var {n} {i}")
-        #        model.Add(seq_var == sum(work[n, s] for s in seq) == len(seq))
-        #        model.Add(sum(work[n, s] for s in seq) < sequence_length+1) # no more than 5 shifts in a row 
-        #        obj_seq_vars.append(seq_var)
-        #        obj_seq_coeffs.append(reward)
         return obj_seq_vars, obj_seq_coeffs
 
-    def _GegatedBoundedSpan(self, n, seq, work, start, length):
+    def _GetNursesThatCanResuscitate(self, nurses):
+        nurses_with_resuscitate_skill = []
+        for n,nurse in enumerate(nurses.nurses):
+            if nurse.resuscitate:
+                nurses_with_resuscitate_skill.append(n)
+        return nurses_with_resuscitate_skill
+
+    def _NegatedBoundedSpan(self, n, seq, work, start, length):
         span = []
         # Left border (start of works, or works[start - 1])
         if start > 0:
@@ -204,17 +398,20 @@ class Constraints:
             span.append(work[n, seq[start + length]])
         return span
 
-    def _GetShiftSequences(self, shifts):
+    def _GetShiftSequences(self, shifts, shift_target=None, day_target=None):
         shift_types = shifts.GetTypes()
         sequences = []
         for st in shift_types:
+            if shift_target and not st[:-1] == shift_target: # not the shift type we are explicitly looking for
+                continue
             sequence = []
             for s, shift in enumerate(shifts.shifts):
+                if day_target and not shifts.ConvertDayStrToDayNum(day_target)==shift.start_date.weekday():
+                    continue
                 if shift.abbreviation == st:
                     sequence.append(s)
             sequences.append(sequence)
         return sequences
-
 
     def _GetShiftDayToDayTransitions(self, shifts, previous_shift_type, next_shift_type):
         day_to_day_transitions = []
@@ -258,7 +455,6 @@ class Constraints:
         shift_week_bundles = []
         cur_week = shifts.shifts[0].start_date.isocalendar().week
         cur_shift_bundle = []
-        cur_week_hours = []
         for s, shift in enumerate(shifts.shifts):
             if cur_week != shift.start_date.isocalendar().week:
                 shift_week_bundles.append(cur_shift_bundle)
@@ -268,11 +464,13 @@ class Constraints:
         shift_week_bundles.append(cur_shift_bundle)
         return shift_week_bundles
 
-    def _GetShiftDayBundles(self, shifts):
+    def _GetShiftDayBundles(self, shifts, shift_type=None):
         shift_day_bundles = []
         cur_day = (shifts.shifts[0].start_date.year, shifts.shifts[0].start_date.month, shifts.shifts[0].start_date.day)
         cur_shift_bundle = []
         for s, shift in enumerate(shifts.shifts):
+            if shift_type and not shift.abbreviation[:-1] == shift_type:
+                continue
             if cur_day != (shift.start_date.year, shift.start_date.month, shift.start_date.day):
                 shift_day_bundles.append(cur_shift_bundle)
                 cur_day = (shift.start_date.year, shift.start_date.month, shift.start_date.day)
@@ -287,7 +485,7 @@ class Constraints:
         assert(fn)
         assert(os.path.isfile(fn))
 
-        constraints = []
+        requests = []
         with open(fn) as f:
             while(True):
                 line = f.readline()
@@ -325,7 +523,7 @@ class Constraints:
                         max_sum   = int(clean_part)
                     elif i == 8:
                         is_hard   = int(clean_part) == 1
-                constraints.append(Constraint(name, full_date, day, shift, do_assign, streakmin, streakmax, max_sum, is_hard))
-        return constraints
+                requests.append(Constraint(name, full_date, day, shift, do_assign, streakmin, streakmax, max_sum, is_hard))
+        return requests
 
         
