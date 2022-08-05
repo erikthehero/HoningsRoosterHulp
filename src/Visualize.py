@@ -23,7 +23,7 @@ class RosterVisualizer:
         months = self._GetAllMonths(shifts)
         for year,month in months:
             plots.append(self._VisualizeMonthReal(year, month, nurses, shifts, work, solver))
-        grid = gridplot(toolbar_location=None, children=[plots])
+        grid = gridplot(toolbar_location="below", children=[plots])
 
         doc = Document()
         doc.add_root(grid)
