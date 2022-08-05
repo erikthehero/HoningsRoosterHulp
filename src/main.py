@@ -440,30 +440,40 @@ def run(_=None):
 
     # add constraints
     obj_bool_vars, obj_bool_coeffs = [],[]
-    obj_int_vars, obj_int_coeffs = [],[]
+    obj_contract_hours_weekly_vars, obj_contract_hours_weekly_coeffs = [],[]
     obj_seq_vars, obj_seq_coeffs = [],[]
+    obj_req_vars, obj_req_coeffs = [],[]
+    obj_favor_weekend_vars, obj_favor_weekend_coeffs = [],[]
 
     constraints.add_fill_every_shift_constraint(model, nurses, shifts, work)
     constraints.add_one_shift_per_day_constraint(model, nurses, shifts, work)
     constraints.add_rest_after_night_shift_constraint(model, nurses, shifts, work)
-    obj_int_vars, obj_int_coeffs = constraints.add_weekly_contract_hours_constraint(model, nurses, shifts, work)
+    constraints.add_skill_requirement_resuscitate(model, nurses, shifts, work)
+    obj_contract_hours_weekly_vars, obj_contract_hours_weekly_coeffs = constraints.add_weekly_contract_hours_constraint(model, nurses, shifts, work)
     obj_bool_vars, obj_bool_coeffs = constraints.add_penalized_day_evening_transition_constraint(model, nurses, shifts, work)
     obj_seq_vars, obj_seq_coeffs = constraints.add_sequence_constraint(model, nurses, shifts, work)
-                            
-    # constraints.add_favor_sequence(...)
-    # constraints.add_favor_whole_weekend(...)
-    # constraints.add_do_do_not_assign_shift(...)
+    constraints.add_favor_whole_weekend(model, nurses, shifts, work)
+    constraints.add_max_5_shifts_per_week(model, nurses, shifts, work)
 
+    # add requests
+    constraints.add_hard_requests_do_not_work_day(model, nurses, shifts, work)
+    constraints.add_hard_requests_do_not_work_shift(model, nurses, shifts, work)
+    constraints.add_hard_requests_rest_after_n_shifts(model, nurses, shifts, work)
+    tmp_vars, tmp_coeffs = constraints.add_soft_requests_do_assign_shift(model, nurses, shifts, work)
+    obj_req_vars.extend(tmp_vars)
+    obj_req_coeffs.extend(tmp_coeffs)
 
     model.Minimize(
-        sum(obj_int_vars[i] * obj_int_coeffs[i]   for i in range(len(obj_int_vars))) + 
+        sum(obj_contract_hours_weekly_vars[i] * obj_contract_hours_weekly_coeffs[i]   for i in range(len(obj_contract_hours_weekly_vars))) + 
         sum(obj_bool_vars[i] * obj_bool_coeffs[i] for i in range(len(obj_bool_vars))) +
-        sum(obj_seq_vars[i] * obj_seq_coeffs[i]  for i in range(len(obj_seq_vars)))
+        sum(obj_seq_vars[i] * obj_seq_coeffs[i]  for i in range(len(obj_seq_vars))) +
+        sum(obj_req_vars[i] * obj_req_coeffs[i]  for i in range(len(obj_req_vars))) +
+        sum(obj_favor_weekend_vars[i] * obj_favor_weekend_coeffs[i]  for i in range(len(obj_favor_weekend_vars)))
     )
 
     # solve
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 60.0
+    solver.parameters.max_time_in_seconds = 120 #3600.0 * 0.5
     solver.parameters.random_seed = 17 #TODO: remove once testing
 
     solution_printer = cp_model.ObjectiveSolutionPrinter()

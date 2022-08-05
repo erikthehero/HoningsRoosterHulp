@@ -58,6 +58,22 @@ class Shifts:
     def GetTypes(self):
         return ["dk0", "dm0", "dl0", "dl1", "a0", "a1", "n0", "n1"]
 
+    def ConvertDayStrToDayNum(self, day_str):
+        if day_str == "ma":
+            return 0
+        elif day_str == "di":
+            return 1
+        elif day_str == "wo":
+            return 2
+        elif day_str == "do":
+            return 3
+        elif day_str == "vr":
+            return 4
+        elif day_str == "za":
+            return 5
+        elif day_str == "zo":
+            return 6
+
     def _initShiftsFromMonth(self):
         shifts = []
         if self.month == 12:
