@@ -426,8 +426,8 @@ def run(_=None):
     output_proto = FLAGS.output_proto
 
     nurses = Nurses("../data/nurses.csv")
-    #shifts = Shifts("../data/shifts.csv", 2022, 11)
-    shifts = Shifts("../data/shifts.csv", start_date=datetime(year=2022, month=10, day=1), end_date=datetime(year=2022, month=12, day=1))
+    shifts = Shifts("../data/shifts.csv", 2022, 10)
+    #shifts = Shifts("../data/shifts.csv", start_date=datetime(year=2022, month=10, day=1), end_date=datetime(year=2022, month=12, day=1))
     constraints = Constraints(general_request_fn="../data/requests.csv", specific_request_fn=None)
     model = cp_model.CpModel()
     roster_visualizer = RosterVisualizer() 
@@ -457,6 +457,7 @@ def run(_=None):
     obj_bool_vars, obj_bool_coeffs = constraints.add_penalized_day_evening_transition_constraint(model, nurses, shifts, work)
     obj_seq_vars, obj_seq_coeffs = constraints.add_sequence_constraint(model, nurses, shifts, work)
     constraints.add_favor_whole_weekend(model, nurses, shifts, work)
+    constraints.add_limit_weekend_shifts(model, nurses, shifts, work)
     constraints.add_max_5_shifts_per_week(model, nurses, shifts, work)
     obj_zzp_vars, obj_zzp_coeffs = constraints.add_penalty_to_zzp_allocation(model, nurses, shifts, work)
 
@@ -465,6 +466,7 @@ def run(_=None):
     constraints.add_hard_requests_do_not_work_shift(model, nurses, shifts, work)
     constraints.add_hard_requests_rest_after_n_shifts(model, nurses, shifts, work)
     constraints.add_hard_requests_work_specific_day_shift(model, nurses, shifts, work)
+    constraints.add_hard_requests_percentage_shift(model, nurses, shifts, work)
     tmp_vars, tmp_coeffs = constraints.add_soft_requests_do_assign_shift(model, nurses, shifts, work)
     obj_req_vars.extend(tmp_vars)
     obj_req_coeffs.extend(tmp_coeffs)
@@ -480,7 +482,7 @@ def run(_=None):
 
     # solve
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 120 #3600.0 * 0.5
+    solver.parameters.max_time_in_seconds = 60 #120 #3600.0 * 0.5
     #solver.parameters.random_seed = 17 #TODO: remove once testing
 
     solution_printer = cp_model.ObjectiveSolutionPrinter()
