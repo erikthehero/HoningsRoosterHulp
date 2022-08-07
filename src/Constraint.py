@@ -3,7 +3,7 @@ from datetime import datetime
 import os
 
 class Constraint:
-    def __init__(self, name=None, full_date=None, day=None, shift=None, do_assign=None, streakmin=None, streakmax=None, max_sum=None, is_hard=None):
+    def __init__(self, name=None, full_date=None, day=None, shift=None, do_assign=None, streakmin=None, streakmax=None, max_sum=None, percentage=None, is_hard=None):
         self.name = name
         self.full_date = full_date
         self.day = day
@@ -12,6 +12,7 @@ class Constraint:
         self.streakmin = streakmin
         self.streakmax = streakmax
         self.max_sum = max_sum
+        self.percentage = percentage
         self.is_hard = is_hard
 
     def __str__(self):
@@ -63,8 +64,8 @@ class Constraints:
         for n,nurse in enumerate(nurses.nurses):
             soft_min = nurse.contract
             soft_max = nurse.contract
-            max_cost = 2
-            min_cost = 3
+            max_cost = 25 # 2
+            min_cost = 20 # 3
 
             for bundle in shift_week_bundles:
                 hard_max = 60 # pp92 CAO Gehandicaptenzorg 2021-2024: max 60 urige werkweek
@@ -151,6 +152,30 @@ class Constraints:
                     if self._ShiftAndDateAreSameDay(shift, specific_day) and specific_day.shift == shift.abbreviation:
                         model.Add(work[n, s] == 1)
         return
+
+    def add_hard_requests_percentage_shift(self, model, nurses, shifts, work):
+        for request in self.requests:
+            if not self._Request_type_is_hard_percentage_shift(request):
+                continue
+        
+            shift_day_bundles = self._GetShiftDayBundles(shifts, shift_type=request.shift)
+            full_shift_list = []
+            for bundle in shift_day_bundles:
+                full_shift_list.extend(bundle)
+            num_weeks = len(shift_day_bundles) // 7
+            shift_hours = shifts.shifts[shift_day_bundles[0][0]].work_hours
+
+            #TODO: sum(full_shift_list) <= ((weeks * contract hours) / n0/n1 hours * request.percentage / 100)
+            for n,nurse in enumerate(nurses.nurses):
+                if not nurse.name == request.name:
+                    continue
+                model.Add(sum(work[n,s] for s in full_shift_list) <= int((num_weeks*nurse.contract)/shift_hours*request.percentage//100))
+        return
+
+    def _Request_type_is_hard_percentage_shift(self, request):
+        if request.percentage and request.is_hard and request.shift:
+            return True
+        return False
 
     def _Request_type_is_hard_work_specific_day_shift(self, request):
         if request.full_date:
@@ -254,7 +279,6 @@ class Constraints:
         return tmp_var, tmp_coeffs
 
     def add_favor_whole_weekend(self, model, nurses, shifts, work):
-        #tmp_var, tmp_coeffs = [],[]
         shift_sequences_saturday = self._GetShiftSequences(shifts, shift_target=None, day_target="za")
         shift_sequences_sunday = self._GetShiftSequences(shifts, shift_target=None, day_target="zo")
         sunday_start_ind = len(shift_sequences_sunday[0]) - len(shift_sequences_saturday[0]) #TODO: to be tested for months starting at sundays
@@ -263,6 +287,29 @@ class Constraints:
             for si in range(len(shift_sequences_saturday)):
                 for ind in range(len(shift_sequences_saturday[si])):
                     model.Add(work[n, shift_sequences_sunday[si][ind+sunday_start_ind]]==1).OnlyEnforceIf(work[n, shift_sequences_saturday[si][ind]])
+
+        return
+
+    def add_limit_weekend_shifts(self, model, nurses, shifts, work):
+        shift_sequences_saturday = self._GetShiftSequences(shifts, shift_target=None, day_target="za")
+        shift_sequences_sunday = self._GetShiftSequences(shifts, shift_target=None, day_target="zo")
+        sunday_start_ind = len(shift_sequences_sunday[0]) - len(shift_sequences_saturday[0])
+        if sunday_start_ind == 1:
+            shift_sequences_sunday.pop(0)
+
+        # bundle weekend pairs
+        weekend_shift_list = []
+        
+        for i in range(len(shift_sequences_saturday[0])):
+            for j,_ in enumerate(shift_sequences_saturday):
+                weekend_shift_list.append(shift_sequences_saturday[j][i])
+                weekend_shift_list.append(shift_sequences_sunday[j][i])
+
+        num_weekends = len(shift_sequences_saturday[0])
+        max_weekend_shifts = (num_weekends-1) * 2
+
+        for n,_ in enumerate(nurses.nurses):
+            model.Add(sum(work[n,s]for s in weekend_shift_list) < max_weekend_shifts)
 
         return
 
@@ -366,11 +413,11 @@ class Constraints:
                                  ( "n1",  "n0", 0),
                                  ( "a0", "dk0", cost), # avond -> ochtend
                                  ( "a0", "dm0", cost),
-                                 ( "a0", "dl1", cost),
+                                 ( "a0", "dl0", cost),
                                  ( "a0", "dl1", cost),
                                  ( "a1", "dk0", cost),
                                  ( "a1", "dm0", cost),
-                                 ( "a1", "dl1", cost),
+                                 ( "a1", "dl0", cost),
                                  ( "a1", "dl1", cost)]
 
         obj_bool_vars = []
@@ -516,14 +563,12 @@ class Constraints:
 
 
     def _InitRequestsFromFile(self, fn):
-        assert(fn)
-        assert(os.path.isfile(fn))
-
         requests = []
-
         if not fn:
             return requests
 
+        assert(fn)
+        assert(os.path.isfile(fn))
         with open(fn) as f:
             while(True):
                 line = f.readline()
@@ -538,7 +583,7 @@ class Constraints:
                     continue
                 
                 line_parts = line.split(";") #TODO: implement this
-                name, full_date, day, shift, do_assign, streakmin, streakmax, max_sum, is_hard = None, None, None, None, None, None, None, None, None
+                name, full_date, day, shift, do_assign, streakmin, streakmax, max_sum, percentage, is_hard = None, None, None, None, None, None, None, None, None, None
                 for i, part in enumerate(line_parts):
                     clean_part = part.replace("\t", "").replace(" ", "").replace("\n", "")
                     if not clean_part:
@@ -560,8 +605,10 @@ class Constraints:
                     elif i == 7:
                         max_sum   = int(clean_part)
                     elif i == 8:
+                        percentage = int(clean_part)
+                    elif i == 9:
                         is_hard   = int(clean_part) == 1
-                requests.append(Constraint(name, full_date, day, shift, do_assign, streakmin, streakmax, max_sum, is_hard))
+                requests.append(Constraint(name, full_date, day, shift, do_assign, streakmin, streakmax, max_sum, percentage, is_hard))
         return requests
 
         
