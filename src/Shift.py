@@ -37,12 +37,22 @@ class ShiftType:
         return self.count
 
 class Shifts:
-    def __init__(self, fn, year, month):
+    def __init__(self, fn, year=None, month=None, start_date=None, end_date=None):
         self.fn = fn
-        self.month = month
-        self.year = year
-        self.types = self._InitTypesFromFile()
-        self.shifts = self._initShiftsFromMonth()
+        # init shifts
+        self.shifts = None
+        if year and month:
+            self.month = month
+            self.year = year
+            self.types = self._InitTypesFromFile()
+            self.shifts = self._initShiftsFromMonth()
+        elif start_date and end_date:
+            self.month  = start_date.month
+            self.year   = start_date.year
+            self.types = self._InitTypesFromFile()
+            self.shifts = self._initShifts(start_date, end_date)
+
+        assert(self.shifts)
         return
 
     def __str__(self):
@@ -85,8 +95,16 @@ class Shifts:
 
         curr_date = datetime(self.year, self.month, 1)
         end_date = datetime(end_year, end_month, 1)
+
+        shifts = self._initShifts(curr_date,end_date)
+        return shifts
+
+    def _initShifts(self, start_date, end_date):
+        assert(self.types)
+        shifts = []
         delta = timedelta(days=1)
         delta_n = 0
+        curr_date = start_date
         while curr_date < end_date:
             for st in self.types:
                 for c in range(st.getCount()):
