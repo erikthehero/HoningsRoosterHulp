@@ -28,6 +28,8 @@ from Nurse import Nurses
 from Shift import Shifts
 from Constraint import Constraints
 from Visualize import RosterVisualizer
+from datetime import datetime
+import math
 
 def negated_bounded_span(works, start, length):
     """Filters an isolated sub-sequence of variables assigned to True.
@@ -424,8 +426,9 @@ def run(_=None):
     output_proto = FLAGS.output_proto
 
     nurses = Nurses("../data/nurses.csv")
-    shifts = Shifts("../data/shifts.csv", 2022, 11)
-    constraints = Constraints("../data/requests.csv")
+    #shifts = Shifts("../data/shifts.csv", 2022, 11)
+    shifts = Shifts("../data/shifts.csv", start_date=datetime(year=2022, month=10, day=1), end_date=datetime(year=2022, month=12, day=1))
+    constraints = Constraints(general_request_fn="../data/requests.csv", specific_request_fn=None)
     model = cp_model.CpModel()
     roster_visualizer = RosterVisualizer() 
 
@@ -444,6 +447,7 @@ def run(_=None):
     obj_seq_vars, obj_seq_coeffs = [],[]
     obj_req_vars, obj_req_coeffs = [],[]
     obj_favor_weekend_vars, obj_favor_weekend_coeffs = [],[]
+    obj_zzp_vars, obj_zzp_coeffs = [],[]
 
     constraints.add_fill_every_shift_constraint(model, nurses, shifts, work)
     constraints.add_one_shift_per_day_constraint(model, nurses, shifts, work)
@@ -454,27 +458,30 @@ def run(_=None):
     obj_seq_vars, obj_seq_coeffs = constraints.add_sequence_constraint(model, nurses, shifts, work)
     constraints.add_favor_whole_weekend(model, nurses, shifts, work)
     constraints.add_max_5_shifts_per_week(model, nurses, shifts, work)
+    obj_zzp_vars, obj_zzp_coeffs = constraints.add_penalty_to_zzp_allocation(model, nurses, shifts, work)
 
     # add requests
     constraints.add_hard_requests_do_not_work_day(model, nurses, shifts, work)
     constraints.add_hard_requests_do_not_work_shift(model, nurses, shifts, work)
     constraints.add_hard_requests_rest_after_n_shifts(model, nurses, shifts, work)
+    constraints.add_hard_requests_work_specific_day_shift(model, nurses, shifts, work)
     tmp_vars, tmp_coeffs = constraints.add_soft_requests_do_assign_shift(model, nurses, shifts, work)
     obj_req_vars.extend(tmp_vars)
     obj_req_coeffs.extend(tmp_coeffs)
 
     model.Minimize(
-        sum(obj_contract_hours_weekly_vars[i] * obj_contract_hours_weekly_coeffs[i]   for i in range(len(obj_contract_hours_weekly_vars))) + 
+        sum(obj_contract_hours_weekly_vars[i]*obj_contract_hours_weekly_coeffs[i] for i in range(len(obj_contract_hours_weekly_vars))) + 
         sum(obj_bool_vars[i] * obj_bool_coeffs[i] for i in range(len(obj_bool_vars))) +
         sum(obj_seq_vars[i] * obj_seq_coeffs[i]  for i in range(len(obj_seq_vars))) +
         sum(obj_req_vars[i] * obj_req_coeffs[i]  for i in range(len(obj_req_vars))) +
-        sum(obj_favor_weekend_vars[i] * obj_favor_weekend_coeffs[i]  for i in range(len(obj_favor_weekend_vars)))
+        sum(obj_favor_weekend_vars[i] * obj_favor_weekend_coeffs[i]  for i in range(len(obj_favor_weekend_vars))) +
+        sum(obj_zzp_vars[i] * obj_zzp_coeffs[i]  for i in range(len(obj_zzp_vars)))
     )
 
     # solve
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 120 #3600.0 * 0.5
-    solver.parameters.random_seed = 17 #TODO: remove once testing
+    #solver.parameters.random_seed = 17 #TODO: remove once testing
 
     solution_printer = cp_model.ObjectiveSolutionPrinter()
     status = solver.Solve(model, solution_printer)
