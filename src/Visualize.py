@@ -86,7 +86,7 @@ class RosterVisualizer:
         plot.min_border_bottom = 5
 
         nurse_glyphs = []
-        nurse_sources = self._GetNurseShiftSourcesForVisualization(nurses, shifts, work, solver)
+        nurse_sources = self._GetNurseShiftSourcesForVisualization(nurses, shifts, work, solver, month)
         for nurse_name in nurse_sources.keys():
             nurse_glyphs.append(plot.rect(x="days", y="weeks", width=1.0, height=0.125, fill_color="colors", line_color="white", fill_alpha=0.7, line_alpha = 0.7, source=nurse_sources[nurse_name], legend_label=nurse_name))
             plot.text(x="name_x", y="name_y", text="name_value", text_font_size = "8px", source=nurse_sources[nurse_name], legend_label=nurse_name)
@@ -175,7 +175,7 @@ class RosterVisualizer:
         week = weeks[index]
         return week
 
-    def _GetNurseShiftSourcesForVisualization(self, nurses, shifts, work, solver):
+    def _GetNurseShiftSourcesForVisualization(self, nurses, shifts, work, solver, month):
         sources = {}
         for n, nurse in enumerate(nurses.nurses):
             days  = []
@@ -189,6 +189,9 @@ class RosterVisualizer:
             shift_type_y = []
 
             for s, shift in enumerate(shifts.shifts):
+                if not shift.start_date.month == month:
+                    continue
+                
                 if solver.Value(work[n,s]):
                     days.append(shift.start_date.weekday())
                     weeks.append(self._GetMonthWeekFromMonthDay(shift.start_date.day) + self._GetYOffsetFromShift(shift.abbreviation))
