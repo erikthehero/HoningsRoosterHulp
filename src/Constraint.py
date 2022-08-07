@@ -19,9 +19,11 @@ class Constraint:
 
 class Constraints:
     # https://ambtenarensalaris.nl/wp-content/uploads/2022/07/Cao-Gehandicaptenzorg-2021-2024.pdf
-    def __init__(self, fn):
-        self.fn = fn
-        self.requests = self._InitRequestsFromFile(self.fn)
+    def __init__(self, general_request_fn=None, specific_request_fn=None):
+        self.general_request_fn = general_request_fn
+        self.specific_request_fn = specific_request_fn
+        self.requests = self._InitRequestsFromFile(self.general_request_fn)
+        self.requests.extend(self._InitRequestsFromFile(self.specific_request_fn))
 
     def __str__(self):
         for request in self.requests:
@@ -61,16 +63,10 @@ class Constraints:
         for n,nurse in enumerate(nurses.nurses):
             soft_min = nurse.contract
             soft_max = nurse.contract
-            if nurse.zzper:
-                max_cost = 4
-                min_cost = 3
-            else:
-                max_cost = 1
-                min_cost = 2
+            max_cost = 2
+            min_cost = 3
 
             for bundle in shift_week_bundles:
-                if i == 1:
-                    j = 0
                 hard_max = 60 # pp92 CAO Gehandicaptenzorg 2021-2024: max 60 urige werkweek
                 cv, cc = self._Add_soft_sum_constraint(n, bundle, shifts, model, work, hard_min, soft_min, min_cost, soft_max, hard_max, max_cost, "weekly_contract_hours")
                 cost_variables.extend(cv)
@@ -142,6 +138,24 @@ class Constraints:
                         conditional_shifts.append(work[n,s]) 
                     model.Add(sum(work[n,s] for s in bundle[1][0])==0).OnlyEnforceIf(conditional_shifts)
         return
+
+    def add_hard_requests_work_specific_day_shift(self, model, nurses, shifts, work):
+        for request in self.requests:
+            if not self._Request_type_is_hard_work_specific_day_shift(request):
+                continue
+            specific_day = request.full_date
+            for s,shift in enumerate(shifts.shifts):
+                for n,nurse in enumerate(nurses.nurses):
+                    if not nurse.name == request.name:
+                        continue
+                    if self._ShiftAndDateAreSameDay(shift, specific_day) and specific_day.shift == shift.abbreviation:
+                        model.Add(work[n, s] == 1)
+        return
+
+    def _Request_type_is_hard_work_specific_day_shift(self, request):
+        if request.full_date:
+            return True
+        return False
 
     def _GetDaysDayCombinationBundles(self, shifts, sequence_length, rest_length=1):
         days_day_combination_bundles = []
@@ -258,6 +272,23 @@ class Constraints:
             for bundle in shift_week_bundles:
                 model.Add(sum(work[n, s] for s in bundle) <= 5)
         return
+
+    def add_penalty_to_zzp_allocation(self, model, nurses, shifts, work):
+        cost = 1 #TODO: tune param
+        obj_zzp_vars, obj_zzp_coeffs = [],[]
+        zzp_nurses =  self._GetAllNursesWithZZPContract(nurses)
+        for s,_ in enumerate(shifts.shifts):
+            for n in zzp_nurses:
+                obj_zzp_vars.append(work[n,s])
+                obj_zzp_coeffs.append(cost)
+        return obj_zzp_vars, obj_zzp_coeffs
+
+    def _GetAllNursesWithZZPContract(self, nurses):
+        zzp_nurses = []
+        for n, nurse in enumerate(nurses.nurses):
+            if nurse.zzper:
+                zzp_nurses.append(n)
+        return zzp_nurses
 
     def _Request_type_is_soft_do_assign_shift(self, request):
         if not request.full_date and request.shift and not request.is_hard:
@@ -430,6 +461,9 @@ class Constraints:
 
     def _ShiftsAreSameDay(self, shift1, shift2):
         return shift1.start_date.replace(hour=0, minute=0, second=0, microsecond=0) == shift2.start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    def _ShiftAndDateAreSameDay(self, shift1, specific_date):
+        return shift1.start_date.replace(hour=0, minute=0, second=0, microsecond=0) == specific_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     def _GetFollowUpShiftsFromShiftType(self, primary_type, target_types, shifts):
         shift_follow_up_bundles = []
@@ -486,6 +520,10 @@ class Constraints:
         assert(os.path.isfile(fn))
 
         requests = []
+
+        if not fn:
+            return requests
+
         with open(fn) as f:
             while(True):
                 line = f.readline()
