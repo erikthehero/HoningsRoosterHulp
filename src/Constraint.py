@@ -164,12 +164,10 @@ class Constraints:
                 full_shift_list.extend(bundle)
             num_weeks = len(shift_day_bundles) // 7
             shift_hours = shifts.shifts[shift_day_bundles[0][0]].work_hours
-
-            #TODO: sum(full_shift_list) <= ((weeks * contract hours) / n0/n1 hours * request.percentage / 100)
             for n,nurse in enumerate(nurses.nurses):
                 if not nurse.name == request.name:
                     continue
-                model.Add(sum(work[n,s] for s in full_shift_list) <= int((num_weeks*nurse.contract)/shift_hours*request.percentage//100))
+                model.Add(sum(work[n,s] for s in full_shift_list) <= int((num_weeks*nurse.contract)/shift_hours*request.percentage/100))
         return
 
     def _Request_type_is_hard_percentage_shift(self, request):
@@ -353,7 +351,7 @@ class Constraints:
         return False
 
     def _Request_type_is_hard_do_not_work_shift(self, request): #TODO: full_date probably can be incorporated
-        if not request.full_date and not request.day and request.shift and not request.do_assign and request.is_hard:
+        if not request.full_date and not request.day and request.shift and not request.do_assign and not request.percentage and request.is_hard:
             return True
         return False        
 

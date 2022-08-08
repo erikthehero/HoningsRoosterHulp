@@ -482,7 +482,7 @@ def run(_=None):
 
     # solve
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 60 #120 #3600.0 * 0.5
+    solver.parameters.max_time_in_seconds = 3600*5 #120 #3600.0 * 0.5
     #solver.parameters.random_seed = 17 #TODO: remove once testing
 
     solution_printer = cp_model.ObjectiveSolutionPrinter()
